@@ -1,1 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rental House Finder</title>
+</head>
+<body>
 
+<h2>Search Houses</h2>
+
+<input type="text" id="location" placeholder="Enter location">
+<input type="text" id="type" placeholder="Enter type (1BHK)">
+<button onclick="search()">Search</button>
+
+<h3>Results:</h3>
+<div id="results"></div>
+
+<script>
+async function search() {
+    let location = document.getElementById("location").value;
+    let type = document.getElementById("type").value;
+
+    let response = await fetch(`http://127.0.0.1:5000/search?location=${location}&type=${type}`);
+    let data = await response.json();
+
+    let output = "";
+
+    data.forEach(p => {
+        output += `
+            <div>
+                <h4>${p.title}</h4>
+                <p>${p.location} - ₹${p.price}</p>
+                <button onclick="addFavorite(${p.id})">❤️ Save</button>
+            </div>
+        `;
+    });
+
+    document.getElementById("results").innerHTML = output;
+}
+
+async function addFavorite(id) {
+    await fetch("http://127.0.0.1:5000/add-favorite", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            user_id: 1,
+            property_id: id
+        })
+    });
+
+    alert("Saved!");
+}
+</script>
+<h2>Analytics</h2>
+<button onclick="loadAnalytics()">Show Analytics</button>
+<div id="analytics"></div>
+
+<script>
+async function loadAnalytics() {
+    let res = await fetch("http://127.0.0.1:5000/analytics");
+    let data = await res.json();
+
+    let output = "";
+    data.forEach(a => {
+        output += `<p>${a.location} → Avg Rent: ₹${a.avg_price}</p>`;
+    });
+
+    document.getElementById("analytics").innerHTML = output;
+}
+</script>
+</body>                                                             
+</html>
