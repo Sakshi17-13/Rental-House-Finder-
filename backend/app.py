@@ -1,19 +1,16 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import sqlite3
+from db import get_db_connection, BASE_DIR
+from werkzeug.utils import secure_filename
+from routes.verification import verification_bp
+from routes.property import property_bp
 import os
-
 app = Flask(__name__)
 CORS(app)
 
 # Database Path Setup
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(BASE_DIR, 'database', 'rental.db')
-
-def get_db_connection():
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+#db_path = os.path.join(BASE_DIR, 'database', 'rental.db')
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
 # Home Route
 @app.route('/')
@@ -82,80 +79,8 @@ def login():
         return jsonify({"error": "Invalid credentials"})
 
 # =========================
-# 🏠 ADD PROPERTY
+# 🏠 ADD FAVORITE
 # =========================
-@app.route('/add-property', methods=['POST'])
-def add_property():
-    data = request.json
-
-    title = data.get('title')
-    location = data.get('location')
-    price = data.get('price')
-    property_type = data.get('type')
-    description = data.get('description')
-    owner_id = data.get('owner_id')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        '''
-        INSERT INTO properties (title, location, price, type, description, owner_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ''',
-        (title, location, price, property_type, description, owner_id)
-    )
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"message": "Property added successfully"})
-
-# =========================
-# 📋 GET ALL PROPERTIES
-# =========================
-@app.route('/get-properties', methods=['GET'])
-def get_properties():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM properties")
-    properties = cursor.fetchall()
-
-    conn.close()
-
-    result = [dict(row) for row in properties]
-
-    return jsonify(result)
-
-# =========================
-# 🔍 SEARCH PROPERTIES
-# =========================
-@app.route('/search', methods=['GET'])
-def search_properties():
-    location = request.args.get('location')
-    property_type = request.args.get('type')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    query = "SELECT * FROM properties WHERE 1=1"
-    params = []
-
-    if location:
-        query += " AND location LIKE ?"
-        params.append(f"%{location}%")
-
-    if property_type:
-        query += " AND type=?"
-        params.append(property_type)
-
-    cursor.execute(query, params)
-    results = cursor.fetchall()
-
-    conn.close()
-
-    return jsonify([dict(row) for row in results])
 
 @app.route('/add-favorite', methods=['POST'])
 def add_favorite():
@@ -259,6 +184,109 @@ def budget():
         "recommended_rent": recommended_rent,
         "suggested_houses": [dict(row) for row in houses]
     })
+
+@app.route('/upload-documents', methods=['POST'])
+def upload_documents():
+    user_id = request.form.get('user_id')
+
+    id_file = request.files['id_proof']
+    property_file = request.files['property_proof']
+
+    id_filename = secure_filename(id_file.filename)
+    property_filename = secure_filename(property_file.filename)
+
+    id_path = os.path.join(UPLOAD_FOLDER, 'id_proofs', id_filename)
+    property_path = os.path.join(UPLOAD_FOLDER, 'property_proofs', property_filename)
+
+    id_file.save(id_path)
+    property_file.save(property_path)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        INSERT INTO verification_documents (user_id, id_proof, property_proof)
+        VALUES (?, ?, ?)
+    ''', (user_id, id_path, property_path))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "Documents uploaded. Pending approval"})
+
+@app.route('/admin/verify/<int:user_id>', methods=['POST'])
+def admin_verify(user_id):
+    status = request.json.get('status')  # approved / rejected
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "UPDATE verification_documents SET status=? WHERE user_id=?",
+        (status, user_id)
+    )
+
+    if status == "approved":
+        cursor.execute(
+            "UPDATE users SET is_verified=1 WHERE id=?",
+            (user_id,)
+        )
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": f"User {status}"})
+
+def update_trust_score(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    score = 0
+
+    cursor.execute("SELECT * FROM users WHERE id=?", (user_id,))
+    user = cursor.fetchone()
+
+    if user['is_verified']:
+        score += 40
+
+    if user['email_verified']:
+        score += 20
+
+    cursor.execute("SELECT COUNT(*) as count FROM complaints WHERE user_id=?", (user_id,))
+    complaints = cursor.fetchone()['count']
+
+    if complaints == 0:
+        score += 20
+    else:
+        score -= 30
+
+    cursor.execute(
+        "UPDATE users SET trust_score=? WHERE id=?",
+        (score, user_id)
+    )
+
+    conn.commit()
+    conn.close()
+
+@app.route('/verify-email/<int:user_id>', methods=['POST'])
+def verify_email(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "UPDATE users SET email_verified=1 WHERE id=?",
+        (user_id,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    update_trust_score(user_id)
+
+    return jsonify({"message": "Email verified"})
+
+app.register_blueprint(verification_bp)
+app.register_blueprint(property_bp)
 # =========================
 # 🚀 RUN SERVER
 # =========================
