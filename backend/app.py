@@ -7,7 +7,11 @@ from routes.property import property_bp
 import os
 app = Flask(__name__)
 CORS(app)
+from flask import send_from_directory
 
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory('uploads', filename)
 # Database Path Setup
 #db_path = os.path.join(BASE_DIR, 'database', 'rental.db')
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
@@ -291,4 +295,4 @@ app.register_blueprint(property_bp)
 # 🚀 RUN SERVER
 # =========================
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)

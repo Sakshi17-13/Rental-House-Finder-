@@ -75,6 +75,14 @@ def create_db():
     )
     ''')
 
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS property_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      property_id INTEGER,
+      image_url TEXT
+    )
+    ''')
+
     # =========================
     # INSERT SAMPLE DATA (SAFE)
     # =========================

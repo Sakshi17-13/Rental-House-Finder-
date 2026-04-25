@@ -7,12 +7,29 @@ const Home = () => {
   const [type, setType] = useState("");
   const [results, setResults] = useState([]);
 
+  const user = localStorage.getItem("user");
+
   const search = async () => {
     const res = await fetch(
       `${API}/search?location=${location}&type=${type}`
     );
     const data = await res.json();
     setResults(data);
+  };
+
+  const saveFavorite = async (id) => {
+    await fetch(`${API}/add-favorite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: user,
+        property_id: id,
+      }),
+    });
+
+    alert("Saved to favorites!");
   };
 
   return (
@@ -32,36 +49,43 @@ const Home = () => {
       <button onClick={search}>Search</button>
 
       <div className="grid">
-        {results.map((p, i) => (
-          <div key={i} className="card">
-            <h3>{p.title}</h3>
-            <p>{p.location}</p>
-            <p>₹{p.price}</p>
-            
-             <button onClick={() => saveFavorite(p.id)}>❤️ Save</button>
-            {p.is_verified && <p className="verified">✅ Verified</p>}
-            {p.fraud_flag && <p className="fraud">⚠ Fake</p>}
-          </div>
-        ))}
+        {results.map((p, i) => {
+          console.log("IMAGE URL:", p.image_url); // 👈 DEBUG LINE
+
+          return (
+            <div key={i} className="card">
+              {/* 🖼️ IMAGE */}
+              <img
+                src={
+                  p.image_url
+                    ? `http://127.0.0.1:5000${p.image_url}`
+                    : "https://via.placeholder.com/250"
+                }
+                alt="property"
+                className="property-img"
+              />
+
+              <h3>{p.title}</h3>
+              <p>{p.location}</p>
+              <p>₹{p.price}</p>
+
+              <button onClick={() => saveFavorite(p.id)}>
+                ❤️ Save
+              </button>
+
+              {p.is_verified && (
+                <p className="verified">✅ Verified</p>
+              )}
+
+              {p.fraud_flag && (
+                <p className="fraud">⚠ Fake</p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 };
 
 export default Home;
-const user = localStorage.getItem("user");
-
-const saveFavorite = async (id) => {
-  await fetch(`${API}/add-favorite`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      user_id: user,
-      property_id: id,
-    }),
-  });
-
-  alert("Saved to favorites!");
-};
